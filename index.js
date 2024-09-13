@@ -1,50 +1,80 @@
-// index.js
+// server.js
 const express = require('express');
-const nodemailer = require('nodemailer');
-const cors = require('cors');
-require('dotenv').config();
+const multer = require('multer');
+const bodyParser = require('body-parser');
+const fs = require('fs');
+const pdf = require('pdf-parse');
+const axios = require('axios');
+
+
 
 const app = express();
-const port = 5000;
-
-// Middleware
+const cors = require('cors');
 app.use(cors());
-app.use(express.json());
 
-// Email sending route
-app.post('/send-email', async (req, res) => {
-  const { email, subject, message } = req.body;
+const upload = multer({ dest: 'uploads/' });
 
-  // Nodemailer transport configuration
-  const transporter = nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 587,
-    secure: false, // true for 465, false for other ports
-    auth: {
-      user:"",
-      pass: "",
-    },
-  });
+app.use(bodyParser.json());
 
-  // Email options
-  const mailOptions = {
-    from: "sgyaswal@gmail.com",
-    to: email,
-    subject: subject,
-    text: message,
-  };
-
-  // Send email
+async function extractTextFromPdf(filePath) {
+  const dataBuffer = fs.readFileSync(filePath);
   try {
-    await transporter.sendMail(mailOptions);
-    res.status(200).send({ message: 'Email sent successfully!' });
+    const data = await pdf(dataBuffer);
+    return data.text;
+
   } catch (error) {
-    console.error('Error sending email:', error);
-    res.status(500).send({ error: 'Failed to send email' });
+    console.error('Error extracting text from PDF:', error);
+    throw error;
+  }
+}
+
+// Endpoint to upload resume
+app.post('/api/upload', upload.single('resume'), async (req, res) => {
+  const resumePath = req.file.path;
+  
+  try {
+    const resumeData = await extractTextFromPdf(resumePath); // Extract text from resume file
+    res.json({ resumeData });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to extract text from resume' });
   }
 });
 
-// Start the server
-app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
+
+async function getAnswer(question, resumeData) {
+  try {
+
+    const response = await axios.post(
+      'https://api.openai.com/v1/chat/completions',
+      {
+        model: 'gpt-4',
+        messages: [{ role: "user", content: `Resume: ${resumeData}\nQuestion: ${question}` }],
+        // max_tokens: 150,
+      },
+      {
+        headers: {
+          Authorization: `Bearer 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`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    return response.data.choices[0].message.content;
+  } catch (error) {
+    console.error('Error calling OpenAI API:', error);
+    throw error;
+  }
+}
+
+
+
+// Endpoint to ask questions
+app.post('/api/question', async (req, res) => {
+  const { question, resumeData } = req.body;
+  const answer = await getAnswer(question, resumeData); // NLP to process and answer question
+  res.json({ answer });
+});
+
+app.listen(5000, () => {
+  console.log('Server is running on port 5000');
 });
