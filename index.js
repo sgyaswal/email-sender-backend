@@ -5,8 +5,10 @@ const bodyParser = require('body-parser');
 const fs = require('fs');
 const pdf = require('pdf-parse');
 const axios = require('axios');
-
-
+// import dotenv from 'dotenv';
+// dotenv.config();
+const dotenv = require('dotenv');
+dotenv.config();
 
 const app = express();
 const cors = require('cors');
@@ -53,7 +55,7 @@ async function getAnswer(question, resumeData) {
       },
       {
         headers: {
-          Authorization: `Bearer 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`,
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
           'Content-Type': 'application/json',
         },
       }
